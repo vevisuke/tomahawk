@@ -8,17 +8,17 @@ from tomahawk.constants import DEFAULT_RSYNC_OPTIONS
 from tomahawk.expect import CommandWithExpect
 from tomahawk.utils import read_login_password, read_sudo_password
 
-def _command(command, login_password, sudo_password, expect_timeout):
+def _command(command, command_args, login_password, sudo_password, expect_timeout):
     """
     Execute a command.
     """
-    return CommandWithExpect(command, login_password, sudo_password, expect_timeout).execute()
+    return CommandWithExpect(command, command_args, login_password, sudo_password, expect_timeout).execute()
 
 def _rsync(command, login_password, expect_timeout):
     """
     Execute rsync
     """
-    return CommandWithExpect(command, login_password, None, expect_timeout).execute()
+    return CommandWithExpect(command, [], login_password, None, expect_timeout).execute()
 
 class BaseExecutor(object):
     """
@@ -99,12 +99,19 @@ class CommandExecutor(BaseExecutor):
         async_results = []
         for host in self.hosts:
             for command in commands:
+                command_args = []
+                for option in ssh_options.split(' '):
+                    #  remove left and right whitespaces
+                    command_args.append(option.strip())
+                command_args.append(host)
+                c = command.replace('"', '\\"')
                 # execute a command with shell because we want to use pipe(|) and so on.
-                c = '%s %s %s "/bin/sh -c \'%s\'"' % (ssh, ssh_options, host, command)
+                command_args.extend([ '/bin/sh', '-c', '"%s"' % (c) ])
+
                 # host, command, ssh_user, ssh_option, login_password, sudo_password
                 async_result = self.process_pool.apply_async(
                     _command,
-                    [ c, self.login_password, self.sudo_password, options['expect_timeout'] ]
+                    [ 'ssh', command_args, self.login_password, self.sudo_password, options['expect_timeout'] ]
                 )
                 async_results.append({ 'host': host, 'command': command, 'async_result': async_result })
 
